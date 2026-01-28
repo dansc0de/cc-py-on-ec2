@@ -64,6 +64,8 @@ flowchart LR
 |------|----------|------|----------------------------------|
 | HTTP | 443      | 0.0.0.0/0 | HTTPS egress traffic to anywhere |
 
+**we need an outbound rule on 443 to download python deps over HTTPS.** 
+
 6. Click **Create security group**
 
 ### 1.3 Launch the Instance
