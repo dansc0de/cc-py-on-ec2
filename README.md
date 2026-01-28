@@ -60,11 +60,9 @@ flowchart LR
 
 5. Verify **Outbound rules** allow all traffic (this is the default):
 
-| Type | Protocol | Port | Destination |
-|------|----------|------|-------------|
-| All traffic | All | All | 0.0.0.0/0 |
-
-⚠️ We only need to allow outbound traffic on 443 and 80, but we all `All Traffic` to make this easier.
+| Type | Protocol | Port | Destination                      |
+|------|----------|------|----------------------------------|
+| HTTP | 443      | 0.0.0.0/0 | HTTPS egress traffic to anywhere |
 
 6. Click **Create security group**
 
