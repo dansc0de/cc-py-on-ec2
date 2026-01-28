@@ -51,7 +51,7 @@ jobs:
           # Check for HTTP rule allowing 0.0.0.0/0
           HTTP_RULE=$(aws ec2 describe-security-groups \
             --group-ids $SG_ID \
-            --query "SecurityGroups[0].IpPermissions[?FromPort==`80`].FromPort" \
+            --query "SecurityGroups[0].IpPermissions[?FromPort=='80'].FromPort" \
             --output text)
           
           if [ -n "$HTTP_RULE" ]; then
