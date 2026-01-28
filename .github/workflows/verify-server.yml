@@ -1,0 +1,112 @@
+name: Verify Flask Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify EC2 instance is running
+        run: |
+          echo "Checking EC2 instance ${{ vars.EC2_INSTANCE_ID }}..."
+          
+          STATE=$(aws ec2 describe-instances \
+            --instance-ids ${{ vars.EC2_INSTANCE_ID }} \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)
+          
+          echo "Instance state: $STATE"
+          
+          if [ "$STATE" = "running" ]; then
+            echo "EC2 instance is running"
+          else
+            echo "EC2 instance is not running (state: $STATE)"
+            exit 1
+          fi
+
+      - name: Verify Security Group allows HTTP
+        run: |
+          echo "Checking Security Group configuration..."
+          
+          SG_ID=$(aws ec2 describe-instances \
+            --instance-ids ${{ vars.EC2_INSTANCE_ID }} \
+            --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' \
+            --output text)
+          
+          echo "Security Group ID: $SG_ID"
+          
+          # Check for HTTP rule allowing 0.0.0.0/0
+          HTTP_RULE=$(aws ec2 describe-security-groups \
+            --group-ids $SG_ID \
+            --query "SecurityGroups[0].IpPermissions[?FromPort==\`80\` && ToPort==\`80\`].IpRanges[?CidrIp=='0.0.0.0/0']" \
+            --output text)
+          
+          if [ -n "$HTTP_RULE" ]; then
+            echo "Security Group allows HTTP (port 80) from anywhere"
+          else
+            echo "Security Group does not allow HTTP from 0.0.0.0/0"
+            echo "  Ensure you have an inbound rule: Type=HTTP, Port=80, Source=0.0.0.0/0"
+            exit 1
+          fi
+
+      - name: Verify Flask API is responding
+        run: |
+          echo "Testing Flask server at ${{ vars.EC2_PUBLIC_IP }}..."
+          
+          # Test health endpoint
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${{ vars.EC2_PUBLIC_IP }}/health --max-time 10 || echo "000")
+          
+          if [ "$RESPONSE" = "200" ]; then
+            echo "Health endpoint returned HTTP 200"
+          else
+            echo "Health endpoint returned HTTP $RESPONSE"
+            exit 1
+          fi
+          
+          # Verify JSON response contains required fields
+          HEALTH_JSON=$(curl -s http://${{ vars.EC2_PUBLIC_IP }}/health --max-time 10)
+          echo "Response: $HEALTH_JSON"
+          
+          if echo "$HEALTH_JSON" | grep -q '"status"'; then
+            echo "Response contains 'status' field"
+          else
+            echo "Response missing 'status' field"
+            exit 1
+          fi
+          
+          if echo "$HEALTH_JSON" | grep -q '"timestamp"'; then
+            echo "Response contains 'timestamp' field"
+          else
+            echo "Response missing 'timestamp' field"
+            exit 1
+          fi
+          
+          if echo "$HEALTH_JSON" | grep -q '"hostname"'; then
+            echo "Response contains 'hostname' field"
+          else
+            echo "Response missing 'hostname' field"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "========================================"
+          echo "All checks passed!"
+          echo "========================================"
+          echo "EC2 instance is running"
+          echo "Security Group configured correctly"
+          echo "Flask API responding with valid JSON"
